@@ -103,6 +103,17 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
         self.prev = Some(prev);
     }
 
+    pub fn delete(&mut self, key: &K) -> bool {
+        let index = self.keys.binary_search(key).ok();
+        if let Some(index) = index {
+            self.keys.remove(index);
+            self.values.remove(index);
+            true
+        } else {
+            false
+        }
+    }
+
     // pub fn split(&mut self) -> (K, BPNodePtr<FANOUT, K, V>) {
     //     let mid = self.keys.len() / 2;
     //     let mut new_node = BPLeafNode::new();

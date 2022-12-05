@@ -97,6 +97,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.insert(index, key);
     }
 
+    pub fn set_key_at(&mut self, index: usize, key: K) {
+        self.keys[index] = key;
+    }
+
     pub fn insert_child_at(&mut self, index: usize, child: BPNodePtr<FANOUT, K, V>) {
         self.children.insert(index, child);
     }

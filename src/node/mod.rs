@@ -86,6 +86,21 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         }
     }
 
+    pub fn get_self_index(&self) -> Option<usize> {
+        let parent = match self {
+            BPNode::Leaf(leaf) => leaf.get_parent(),
+            BPNode::Index(index) => index.get_parent(),
+        }?
+        .upgrade()
+        .unwrap();
+        for (i, child) in parent.borrow().as_index().get_children().iter().enumerate() {
+            if Rc::ptr_eq(child, &parent) {
+                return Some(i);
+            }
+        }
+        unreachable!();
+    }
+
     pub fn is_full(&self) -> bool {
         match self {
             BPNode::Leaf(leaf) => leaf.is_full(),

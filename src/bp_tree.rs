@@ -22,7 +22,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
         std::mem::replace(&mut self.root, new_root)
     }
 
-    pub fn locate_leaf(&self, key: &K) -> BPNodePtr<FANOUT, K, V> {
+    pub fn locate_leaf_for_insert(&self, key: &K) -> BPNodePtr<FANOUT, K, V> {
         let mut node = self.root.clone();
         while let BPNode::Index(inode) = node.clone().borrow().deref() {
             match inode.search_key(&key) {
@@ -37,8 +37,23 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
         node
     }
 
+    pub fn locate_leaf_for_delete(&self, key: &K) -> Option<BPNodePtr<FANOUT, K, V>> {
+        let mut node = self.root.clone();
+        while let BPNode::Index(inode) = node.clone().borrow().deref() {
+            match inode.search_key(&key) {
+                Ok(idx) => {
+                    node = inode.get_child(idx + 1).unwrap().clone();
+                }
+                Err(_) => {
+                    return None;
+                }
+            }
+        }
+        Some(node)
+    }
+
     pub fn insert(&mut self, key: K, value: V) {
-        let leafnode = self.locate_leaf(&key);
+        let leafnode = self.locate_leaf_for_insert(&key);
         if leafnode.borrow_mut().as_leaf_mut().insert(key, value) {
             if leafnode.borrow().is_full() {
                 self.adjust_node(&leafnode);
@@ -89,6 +104,48 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
         iroot.push_key(split_key);
         iroot.push_child(old_root);
         iroot.push_child(right.clone());
+    }
+
+    pub fn locate_index_node(node: &BPNodePtr<FANOUT, K, V>) -> Option<BPNodePtr<FANOUT, K, V>> {
+        let mut node = node.clone();
+        while node.borrow().get_self_index()? == 0 {
+            node = {
+                let node = node.borrow();
+                let parent = node.get_parent().unwrap();
+                parent.upgrade().unwrap()
+            };
+        }
+        Some(node)
+    }
+
+    pub fn delete(&mut self, key: &K) {
+        if let Some(leafnode) = self.locate_leaf_for_delete(key) {
+            let is_first = {
+                let mut leafnode = leafnode.borrow_mut();
+                let leaf = leafnode.as_leaf_mut();
+                let is_first = leaf.get_key(0) == Some(key);
+                leaf.delete(key);
+                is_first
+            };
+
+            // TODO
+            // if leaf.is_empty() {
+            //     self.adjust_underflow(&leafnode);
+            // }
+
+            // if is_first {
+            //     if let Some(pnode) = BPTree::locate_index_node(leafnode) {
+            //         if let Some(ppnode) = pnode.borrow().get_parent() {
+            //             if let Some(index) = pnode.borrow().get_self_index() {
+            //                 if index > 0 {
+            //                     let ppnode = ppnode.upgrade().unwrap();
+
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
+        }
     }
 
     pub fn print(&self) {
