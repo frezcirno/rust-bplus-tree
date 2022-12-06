@@ -1,10 +1,12 @@
+use crate::bp_tree::BPTree;
+
 use super::{BPNode, BPNodePtr, BPNodeWeak};
 use std::fmt::Debug;
 use std::rc::Rc;
 
 pub struct BPIndexNode<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> {
     keys: Vec<K>,
-    children: Vec<BPNodePtr<FANOUT, K, V>>,
+    children: Vec<BPTree<FANOUT, K, V>>,
     parent: Option<BPNodeWeak<FANOUT, K, V>>,
 }
 
@@ -27,7 +29,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
 
     pub fn new_with(
         keys: Vec<K>,
-        children: Vec<BPNodePtr<FANOUT, K, V>>,
+        children: Vec<BPTree<FANOUT, K, V>>,
         parent: Option<BPNodeWeak<FANOUT, K, V>>,
     ) -> Self {
         BPIndexNode {
@@ -38,7 +40,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
     }
 
     pub fn is_full(&self) -> bool {
-        self.children.len() == FANOUT
+        self.keys.len() == FANOUT
     }
 
     pub fn is_half_full(&self) -> bool {
@@ -57,15 +59,15 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.get(index)
     }
 
-    pub fn get_child(&self, index: usize) -> Option<&BPNodePtr<FANOUT, K, V>> {
+    pub fn get_child(&self, index: usize) -> Option<&BPTree<FANOUT, K, V>> {
         self.children.get(index)
     }
 
-    pub fn get_child_mut(&mut self, index: usize) -> Option<&mut BPNodePtr<FANOUT, K, V>> {
+    pub fn get_child_mut(&mut self, index: usize) -> Option<&mut BPTree<FANOUT, K, V>> {
         self.children.get_mut(index)
     }
 
-    pub fn get_children(&self) -> &Vec<BPNodePtr<FANOUT, K, V>> {
+    pub fn get_children(&self) -> &Vec<BPTree<FANOUT, K, V>> {
         &self.children
     }
 
@@ -81,7 +83,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.push(key);
     }
 
-    pub fn push_child(&mut self, child: BPNodePtr<FANOUT, K, V>) {
+    pub fn push_child(&mut self, child: BPTree<FANOUT, K, V>) {
         self.children.push(child);
     }
 
@@ -97,24 +99,24 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.insert(index, key);
     }
 
-    pub fn set_key_at(&mut self, index: usize, key: K) {
+    pub fn set_key(&mut self, index: usize, key: K) {
         self.keys[index] = key;
     }
 
-    pub fn insert_child_at(&mut self, index: usize, child: BPNodePtr<FANOUT, K, V>) {
+    pub fn insert_child_at(&mut self, index: usize, child: BPTree<FANOUT, K, V>) {
         self.children.insert(index, child);
     }
 
-    pub fn insert_child(&mut self, index: usize, child: BPNodePtr<FANOUT, K, V>) {
+    pub fn insert_child(&mut self, index: usize, child: BPTree<FANOUT, K, V>) {
         self.children.insert(index, child);
     }
 
-    pub fn push_key_child(&mut self, key: K, child: BPNodePtr<FANOUT, K, V>) {
+    pub fn push_key_child(&mut self, key: K, child: BPTree<FANOUT, K, V>) {
         self.keys.push(key);
         self.children.push(child);
     }
 
-    pub fn remove_key_child(&mut self, index: usize) -> Option<(K, BPNodePtr<FANOUT, K, V>)> {
+    pub fn remove_key_child(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
         Some((self.keys.remove(index), self.children.remove(index)))
     }
 
@@ -122,9 +124,9 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.binary_search(key)
     }
 
-    pub fn search_child(&self, node: &BPNodePtr<FANOUT, K, V>) -> Option<usize> {
+    pub fn search_child(&self, node: &BPTree<FANOUT, K, V>) -> Option<usize> {
         for (i, child) in self.children.iter().enumerate() {
-            if Rc::ptr_eq(child, node) {
+            if Rc::ptr_eq(&child.root, &node.root) {
                 return Some(i);
             }
         }
@@ -134,10 +136,11 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
     pub fn split_index_node(inode: &mut BPIndexNode<FANOUT, K, V>) -> (K, BPNodePtr<FANOUT, K, V>) {
         let split_key = *inode.get_key(FANOUT / 2).unwrap();
         let new_index = BPIndexNode::new_with(
-            inode.keys.split_off(FANOUT / 2),
-            inode.children.split_off(FANOUT / 2),
+            inode.keys.split_off(FANOUT / 2 + 1),
+            inode.children.split_off(FANOUT / 2 + 1),
             inode.parent.clone(),
         );
+        inode.keys.pop();
         (split_key, BPNode::new_index_ptr_from(new_index))
     }
 }

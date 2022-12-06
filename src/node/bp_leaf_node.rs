@@ -75,6 +75,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
         self.keys.get(index)
     }
 
+    pub fn set_key(&mut self, index: usize, key: K) {
+        self.keys[index] = key;
+    }
+
     pub fn get_parent(&self) -> Option<&BPNodeWeak<FANOUT, K, V>> {
         self.parent.as_ref()
     }
@@ -114,6 +118,16 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
         }
     }
 
+    pub fn delete_at(&mut self, index: usize) -> Option<(K, V)> {
+        if index < self.keys.len() {
+            let key = self.keys.remove(index);
+            let value = self.values.remove(index);
+            Some((key, value))
+        } else {
+            None
+        }
+    }
+
     // pub fn split(&mut self) -> (K, BPNodePtr<FANOUT, K, V>) {
     //     let mid = self.keys.len() / 2;
     //     let mut new_node = BPLeafNode::new();
@@ -149,5 +163,19 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
         let new_leaf_ptr = BPNode::new_leaf_ptr_from(new_leaf);
         leaf.next = Some(new_leaf_ptr.clone());
         (split_key, new_leaf_ptr)
+    }
+
+    pub fn search_key(&self, key: &K) -> Result<usize, usize> {
+        self.keys.binary_search(key)
+    }
+
+    pub fn push_key_value(&mut self, key: K, value: V) {
+        self.keys.push(key);
+        self.values.push(value);
+    }
+
+    pub fn insert_key_value(&mut self, index: usize, key: K, value: V) {
+        self.keys.insert(index, key);
+        self.values.insert(index, value);
     }
 }

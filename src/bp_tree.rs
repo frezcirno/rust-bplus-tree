@@ -8,7 +8,30 @@ use crate::node::{BPIndexNode, BPLeafNode};
 use crate::node::{BPNode, BPNodePtr};
 
 pub struct BPTree<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> {
-    root: BPNodePtr<FANOUT, K, V>,
+    pub(crate) root: BPNodePtr<FANOUT, K, V>,
+}
+
+impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> Debug for BPTree<FANOUT, K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let node = &self.root;
+        let mut queue = VecDeque::new();
+        queue.push_back(node.clone());
+        while !queue.is_empty() {
+            let node = queue.pop_front().unwrap();
+            match node.borrow().deref() {
+                BPNode::Leaf(leaf) => {
+                    f.write_fmt(format_args!("Leaf: {:?}", leaf))?;
+                }
+                BPNode::Index(index) => {
+                    f.write_fmt(format_args!("Index: {:?}", index))?;
+                    for child in index.get_children() {
+                        queue.push_back(child.root.clone());
+                    }
+                }
+            };
+        }
+        Ok(())
+    }
 }
 
 impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT, K, V> {
@@ -22,41 +45,46 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
         std::mem::replace(&mut self.root, new_root)
     }
 
-    pub fn locate_leaf_for_insert(&self, key: &K) -> BPNodePtr<FANOUT, K, V> {
-        let mut node = self.root.clone();
-        while let BPNode::Index(inode) = node.clone().borrow().deref() {
-            match inode.search_key(&key) {
-                Ok(idx) => {
-                    node = inode.get_child(idx + 1).unwrap().clone();
-                }
-                Err(pos) => {
-                    node = inode.get_child(pos).unwrap().clone();
-                }
-            }
-        }
-        node
-    }
-
-    pub fn locate_leaf_for_delete(&self, key: &K) -> Option<BPNodePtr<FANOUT, K, V>> {
-        let mut node = self.root.clone();
-        while let BPNode::Index(inode) = node.clone().borrow().deref() {
-            match inode.search_key(&key) {
-                Ok(idx) => {
-                    node = inode.get_child(idx + 1).unwrap().clone();
-                }
-                Err(_) => {
-                    return None;
-                }
-            }
-        }
-        Some(node)
-    }
-
     pub fn insert(&mut self, key: K, value: V) {
-        let leafnode = self.locate_leaf_for_insert(&key);
-        if leafnode.borrow_mut().as_leaf_mut().insert(key, value) {
-            if leafnode.borrow().is_full() {
-                self.adjust_node(&leafnode);
+        self.insert_recur(key, value);
+        if self.root.borrow().deref().is_full() {
+            let old_root = self.root_replace(BPNode::new_index_ptr());
+            let (split_key, right) = BPTree::split_node(&old_root);
+            let mut root = self.root.borrow_mut();
+            let root = root.as_index_mut();
+            root.push_key(split_key);
+            root.push_child(BPTree { root: old_root });
+            root.push_child(BPTree { root: right });
+        }
+    }
+
+    pub fn insert_recur(&mut self, key: K, value: V) {
+        let mut root = self.root.borrow_mut();
+
+        if root.is_empty() {
+            root.push_key_value(key, value);
+            return;
+        }
+
+        let index = root.search_key(&key);
+        if let Ok(_) = index {
+            // If the key is already in the tree, do nothing.
+            return;
+        } else if let Err(index) = index {
+            // If the key is not in the tree
+            match root.deref_mut() {
+                BPNode::Leaf(lroot) => {
+                    lroot.insert_key_value(index, key, value);
+                }
+                BPNode::Index(iroot) => {
+                    let child = iroot.get_child_mut(index).unwrap();
+                    child.insert_recur(key, value);
+                    if child.root.borrow().is_full() {
+                        let (split_key, right) = BPTree::split_node(&child.root);
+                        iroot.insert_key_at(index, split_key);
+                        iroot.insert_child_at(index + 1, BPTree { root: right });
+                    }
+                }
             }
         }
     }
@@ -68,103 +96,41 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
         }
     }
 
-    pub fn adjust_node(&mut self, node: &BPNodePtr<FANOUT, K, V>) {
-        let (split_key, right) = BPTree::split_node(node);
+    pub fn remove(&mut self, key: &K) {
+        let mut root = self.root.borrow_mut();
 
-        if let Some(parent) = node.borrow().get_parent() {
-            let parent = parent.upgrade().unwrap();
-            if {
-                let mut parent = parent.borrow_mut();
-                let parent = parent.as_index_mut();
-                let index = parent.search_key(&split_key).unwrap_err();
-                parent.insert_key_at(index, split_key);
-                parent.insert_child_at(index + 1, right.clone());
-                parent.is_full()
-            } {
-                self.adjust_node(&parent);
-            }
-
+        if root.is_empty() {
             return;
         }
 
-        // We are splitting the root node
-        // create a new index node and make it the root
-        let old_root = self.root_replace(BPNode::new_index_ptr());
+        // check if the key is in the tree
+        let index = root.search_key(key);
+        if let Ok(index) = index {
+            // if the key is a leaf node, just delete it
+            if let BPNode::Leaf(leaf) = root.deref_mut() {
+                leaf.delete_at(index).unwrap();
+                return;
+            }
 
-        // insert the old root and the new node as children of the new root
-        old_root
-            .borrow_mut()
-            .set_parent(Some(Rc::downgrade(&self.root)));
-        right
-            .borrow_mut()
-            .set_parent(Some(Rc::downgrade(&self.root)));
+            // if the key is in an index node, find the successor and replace the key
+            let successor = BPTree::find_successor(&root.get_child(index + 1).unwrap().root);
+            root.set_key(index, successor);
 
-        let mut root = self.root.borrow_mut();
-        let iroot = root.as_index_mut();
-        iroot.push_key(split_key);
-        iroot.push_child(old_root);
-        iroot.push_child(right.clone());
-    }
-
-    pub fn locate_index_node(node: &BPNodePtr<FANOUT, K, V>) -> Option<BPNodePtr<FANOUT, K, V>> {
-        let mut node = node.clone();
-        while node.borrow().get_self_index()? == 0 {
-            node = {
-                let node = node.borrow();
-                let parent = node.get_parent().unwrap();
-                parent.upgrade().unwrap()
-            };
-        }
-        Some(node)
-    }
-
-    pub fn delete(&mut self, key: &K) {
-        if let Some(leafnode) = self.locate_leaf_for_delete(key) {
-            let is_first = {
-                let mut leafnode = leafnode.borrow_mut();
-                let leaf = leafnode.as_leaf_mut();
-                let is_first = leaf.get_key(0) == Some(key);
-                leaf.delete(key);
-                is_first
-            };
-
-            // TODO
-            // if leaf.is_empty() {
-            //     self.adjust_underflow(&leafnode);
-            // }
-
-            // if is_first {
-            //     if let Some(pnode) = BPTree::locate_index_node(leafnode) {
-            //         if let Some(ppnode) = pnode.borrow().get_parent() {
-            //             if let Some(index) = pnode.borrow().get_self_index() {
-            //                 if index > 0 {
-            //                     let ppnode = ppnode.upgrade().unwrap();
-
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
+            // recursively remove the successor
+            let leaf = root.get_child_mut(index + 1).unwrap();
+            leaf.remove(&successor);
+        } else if let Err(index) = index {
+            // if the key is not in the tree, recursively remove it from the child node
+            let child = root.get_child_mut(index).unwrap();
+            child.remove(key);
         }
     }
 
-    pub fn print(&self) {
-        let node = &self.root;
-        let mut queue = VecDeque::new();
-        queue.push_back(node.clone());
-        while !queue.is_empty() {
-            let node = queue.pop_front().unwrap();
-            match node.borrow().deref() {
-                BPNode::Leaf(leaf) => {
-                    println!("Leaf: {:?}", leaf);
-                }
-                BPNode::Index(index) => {
-                    println!("Index: {:?}", index);
-                    for child in index.get_children() {
-                        queue.push_back(child.clone());
-                    }
-                }
-            };
+    pub fn find_successor(node: &BPNodePtr<FANOUT, K, V>) -> K {
+        let node = node.borrow();
+        if let BPNode::Index(inode) = node.deref() {
+            return BPTree::find_successor(&inode.get_child(0).unwrap().root);
         }
+        *node.get_key(0).unwrap()
     }
 }

@@ -10,13 +10,15 @@ use std::{
     rc::{Rc, Weak},
 };
 
+use crate::bp_tree::BPTree;
+
 pub type BPNodePtr<const FANOUT: usize, K, V> = Rc<RefCell<BPNode<FANOUT, K, V>>>;
 pub type BPNodeWeak<const FANOUT: usize, K, V> = Weak<RefCell<BPNode<FANOUT, K, V>>>;
 
 #[derive(Debug)]
 pub enum BPNode<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> {
-    Leaf(BPLeafNode<FANOUT, K, V>),
     Index(BPIndexNode<FANOUT, K, V>),
+    Leaf(BPLeafNode<FANOUT, K, V>),
 }
 
 impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT, K, V> {
@@ -42,6 +44,20 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
 
     pub fn new_index_ptr_from(inode: BPIndexNode<FANOUT, K, V>) -> BPNodePtr<FANOUT, K, V> {
         Rc::new(RefCell::new(BPNode::Index(inode)))
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        match self {
+            BPNode::Leaf(_) => true,
+            BPNode::Index(_) => false,
+        }
+    }
+
+    pub fn is_index(&self) -> bool {
+        match self {
+            BPNode::Leaf(_) => false,
+            BPNode::Index(_) => true,
+        }
     }
 
     pub fn as_leaf(&self) -> &BPLeafNode<FANOUT, K, V> {
@@ -94,7 +110,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         .upgrade()
         .unwrap();
         for (i, child) in parent.borrow().as_index().get_children().iter().enumerate() {
-            if Rc::ptr_eq(child, &parent) {
+            if Rc::ptr_eq(&child.root, &parent) {
                 return Some(i);
             }
         }
@@ -105,6 +121,76 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         match self {
             BPNode::Leaf(leaf) => leaf.is_full(),
             BPNode::Index(index) => index.is_full(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            BPNode::Leaf(leaf) => leaf.is_empty(),
+            BPNode::Index(index) => index.is_empty(),
+        }
+    }
+
+    pub fn is_root(&self) -> bool {
+        match self {
+            BPNode::Leaf(leaf) => leaf.is_root(),
+            BPNode::Index(index) => index.is_root(),
+        }
+    }
+
+    pub fn search_key(&self, key: &K) -> Result<usize, usize> {
+        match self {
+            BPNode::Leaf(leaf) => leaf.search_key(key),
+            BPNode::Index(index) => index.search_key(key),
+        }
+    }
+
+    pub fn get_child(&self, index: usize) -> Option<&BPTree<FANOUT, K, V>> {
+        match self {
+            BPNode::Leaf(_) => panic!("not an index node"),
+            BPNode::Index(inode) => inode.get_child(index),
+        }
+    }
+
+    pub fn get_child_mut(&mut self, index: usize) -> Option<&mut BPTree<FANOUT, K, V>> {
+        match self {
+            BPNode::Leaf(_) => panic!("not an index node"),
+            BPNode::Index(inode) => inode.get_child_mut(index),
+        }
+    }
+
+    pub fn get_key(&self, index: usize) -> Option<&K> {
+        match self {
+            BPNode::Leaf(lnode) => lnode.get_key(index),
+            BPNode::Index(inode) => inode.get_key(index),
+        }
+    }
+
+    pub fn set_key(&mut self, index: usize, key: K) {
+        match self {
+            BPNode::Leaf(lnode) => lnode.set_key(index, key),
+            BPNode::Index(inode) => inode.set_key(index, key),
+        }
+    }
+
+    pub fn push_key_child(&mut self, key: K, child: BPTree<FANOUT, K, V>) {
+        match self {
+            BPNode::Leaf(_) => panic!("not an index node"),
+            BPNode::Index(inode) => inode.push_key_child(key, child),
+        }
+    }
+
+    pub fn push_key_value(&mut self, key: K, value: V) {
+        match self {
+            BPNode::Leaf(leaf) => leaf.push_key_value(key, value),
+            BPNode::Index(_) => panic!("not a leaf node"),
+        }
+    }
+
+    pub fn insert_key_value(&mut self, index: usize, key: K, value: V) {
+        match self {
+            BPNode::Leaf(leaf) => leaf.insert_key_value(index, key, value),
+            BPNode::Index(_) => panic!("not a leaf node"),
         }
     }
 }
