@@ -88,6 +88,34 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        match self {
+            BPNode::Leaf(leaf) => leaf.is_empty(),
+            BPNode::Index(index) => index.is_empty(),
+        }
+    }
+
+    pub fn is_full(&self) -> bool {
+        match self {
+            BPNode::Leaf(leaf) => leaf.is_full(),
+            BPNode::Index(index) => index.is_full(),
+        }
+    }
+
+    pub fn is_minimum(&self) -> bool {
+        match self {
+            BPNode::Leaf(leaf) => leaf.is_minimum(),
+            BPNode::Index(index) => index.is_minimum(),
+        }
+    }
+
+    pub fn is_underflow(&self) -> bool {
+        match self {
+            BPNode::Leaf(leaf) => leaf.is_underflow(),
+            BPNode::Index(index) => index.is_underflow(),
+        }
+    }
+
     pub fn get_parent(&self) -> Option<&BPNodeWeak<FANOUT, K, V>> {
         match self {
             BPNode::Leaf(leaf) => leaf.get_parent(),
@@ -117,20 +145,6 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         unreachable!();
     }
 
-    pub fn is_full(&self) -> bool {
-        match self {
-            BPNode::Leaf(leaf) => leaf.is_full(),
-            BPNode::Index(index) => index.is_full(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            BPNode::Leaf(leaf) => leaf.is_empty(),
-            BPNode::Index(index) => index.is_empty(),
-        }
-    }
-
     pub fn is_root(&self) -> bool {
         match self {
             BPNode::Leaf(leaf) => leaf.is_root(),
@@ -156,6 +170,13 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         match self {
             BPNode::Leaf(_) => panic!("not an index node"),
             BPNode::Index(inode) => inode.get_child_mut(index),
+        }
+    }
+
+    pub fn remove_child(&mut self, index: usize) -> BPTree<FANOUT, K, V> {
+        match self {
+            BPNode::Leaf(_) => panic!("not an index node"),
+            BPNode::Index(inode) => inode.remove_child(index),
         }
     }
 

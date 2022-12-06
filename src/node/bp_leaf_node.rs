@@ -54,8 +54,12 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
         self.keys.len() == FANOUT
     }
 
-    pub fn is_half_full(&self) -> bool {
+    pub fn is_minimum(&self) -> bool {
         self.keys.len() == FANOUT / 2
+    }
+
+    pub fn is_underflow(&self) -> bool {
+        self.keys.len() < FANOUT / 2
     }
 
     pub fn is_empty(&self) -> bool {

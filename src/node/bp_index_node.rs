@@ -43,8 +43,12 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.len() == FANOUT
     }
 
-    pub fn is_half_full(&self) -> bool {
-        self.keys.len() == FANOUT / 2
+    pub fn is_minimum(&self) -> bool {
+        self.children.len() == FANOUT / 2
+    }
+
+    pub fn is_underflow(&self) -> bool {
+        self.children.len() < FANOUT / 2
     }
 
     pub fn is_empty(&self) -> bool {
@@ -114,6 +118,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
     pub fn push_key_child(&mut self, key: K, child: BPTree<FANOUT, K, V>) {
         self.keys.push(key);
         self.children.push(child);
+    }
+
+    pub fn remove_child(&mut self, index: usize) -> BPTree<FANOUT, K, V> {
+        self.children.remove(index)
     }
 
     pub fn remove_key_child(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
