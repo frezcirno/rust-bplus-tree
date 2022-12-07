@@ -20,10 +20,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> Debug for BPT
             let node = queue.pop_front().unwrap();
             match node.borrow().deref() {
                 BPNode::Leaf(leaf) => {
-                    f.write_fmt(format_args!("Leaf: {:?}", leaf))?;
+                    f.write_fmt(format_args!("Leaf: {:?}\n", leaf))?;
                 }
                 BPNode::Index(index) => {
-                    f.write_fmt(format_args!("Index: {:?}", index))?;
+                    f.write_fmt(format_args!("Index: {:?}\n", index))?;
                     for child in index.get_children() {
                         queue.push_back(child.root.clone());
                     }
@@ -41,7 +41,11 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
         }
     }
 
-    pub fn root_replace(&mut self, new_root: BPNodePtr<FANOUT, K, V>) -> BPNodePtr<FANOUT, K, V> {
+    pub fn new_from(root: BPNodePtr<FANOUT, K, V>) -> Self {
+        BPTree { root }
+    }
+
+    fn root_replace(&mut self, new_root: BPNodePtr<FANOUT, K, V>) -> BPNodePtr<FANOUT, K, V> {
         std::mem::replace(&mut self.root, new_root)
     }
 
@@ -92,7 +96,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
     pub fn split_node(node: &BPNodePtr<FANOUT, K, V>) -> (K, BPNodePtr<FANOUT, K, V>) {
         match node.borrow_mut().deref_mut() {
             BPNode::Leaf(leaf) => BPLeafNode::split_leaf_node(node, leaf),
-            BPNode::Index(index) => BPIndexNode::split_index_node(index),
+            BPNode::Index(index) => BPIndexNode::split_node(index),
         }
     }
 
@@ -104,29 +108,53 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
         }
 
         // check if the key is in the tree
-        let index = root.search_key(key);
-        if let Ok(index) = index {
-            // if the key is a leaf node, just delete it
-            if let BPNode::Leaf(leaf) = root.deref_mut() {
-                leaf.delete_at(index).unwrap();
-                return;
+        match root.search_key(key) {
+            Err(index) => {
+                // if the key is not in the tree root, recursively remove it from the child node
+                let child = root.get_child_mut(index).unwrap();
+                child.remove(key);
             }
+            Ok(index) => {
+                // The key is in the tree root
+                // if the root is a leaf node, just remove it
+                if let BPNode::Leaf(leaf) = root.deref_mut() {
+                    leaf.remove(index).unwrap();
+                    return;
+                }
+                let root = root.as_index_mut();
 
-            // if the key is in an index node, find the successor and replace the key
-            let successor = BPTree::find_successor(&root.get_child(index + 1).unwrap().root);
-            root.set_key(index, successor);
+                // recursively remove the subtree root
+                let child = root.get_child_mut(index + 1).unwrap();
+                child.remove(&key);
 
-            // recursively remove the successor
-            let leaf = root.get_child_mut(index + 1).unwrap();
-            leaf.remove(&successor);
-        } else if let Err(index) = index {
-            // if the key is not in the tree, recursively remove it from the child node
-            let child = root.get_child_mut(index).unwrap();
-            child.remove(key);
+                if child.root.borrow().is_underflow() {
+                    // if the child node is underflow, merge it with its sibling
+                    // It is guaranteed that the sibling node is not empty
+                    let sibling_index = root.get_sibiling_index(index + 1);
+                    let sibiling_is_left = sibling_index < index;
+                    let sibling = root.get_child(sibling_index).unwrap();
+                    if sibling.root.borrow().is_minimum() {
+                        // if the sibling node is minimum, merge it with the child node
+                        root.merge_children(index + 1, sibiling_is_left);
+                    } else {
+                        // if the sibling node is not minimum, rebalance it with the child node
+                        // if sibiling_is_left {
+                        //     root.rebalance_child(&sibling, &child);
+                        // } else {
+                        //     root.rebalance_child(&child, &sibling);
+                        // }
+                    }
+                } else {
+                    // The root is an index node, find the successor and replace the key
+                    let successor =
+                        BPTree::find_successor(&root.get_child(index + 1).unwrap().root);
+                    root.set_key(index, successor);
+                }
+            }
         }
     }
 
-    pub fn find_successor(node: &BPNodePtr<FANOUT, K, V>) -> K {
+    fn find_successor(node: &BPNodePtr<FANOUT, K, V>) -> K {
         let node = node.borrow();
         if let BPNode::Index(inode) = node.deref() {
             return BPTree::find_successor(&inode.get_child(0).unwrap().root);

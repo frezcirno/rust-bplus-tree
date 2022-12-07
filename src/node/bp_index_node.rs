@@ -2,6 +2,7 @@ use crate::bp_tree::BPTree;
 
 use super::{BPNode, BPNodePtr, BPNodeWeak};
 use std::fmt::Debug;
+use std::ops::DerefMut;
 use std::rc::Rc;
 
 pub struct BPIndexNode<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> {
@@ -59,6 +60,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.parent.is_none()
     }
 
+    pub fn size(&self) -> usize {
+        self.keys.len()
+    }
+
     pub fn get_key(&self, index: usize) -> Option<&K> {
         self.keys.get(index)
     }
@@ -103,6 +108,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.insert(index, key);
     }
 
+    pub fn remove_key(&mut self, index: usize) -> K {
+        self.keys.remove(index)
+    }
+
     pub fn set_key(&mut self, index: usize, key: K) {
         self.keys[index] = key;
     }
@@ -124,12 +133,23 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.children.remove(index)
     }
 
-    pub fn remove_key_child(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
+    pub fn remove_key_lchild(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
         Some((self.keys.remove(index), self.children.remove(index)))
+    }
+
+    pub fn remove_key_rchild(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
+        Some((self.keys.remove(index), self.children.remove(index + 1)))
     }
 
     pub fn search_key(&self, key: &K) -> Result<usize, usize> {
         self.keys.binary_search(key)
+    }
+
+    pub fn get_index_of(&self, key: &K) -> usize {
+        match self.keys.binary_search(key) {
+            Ok(index) => index + 1,
+            Err(index) => index,
+        }
     }
 
     pub fn search_child(&self, node: &BPTree<FANOUT, K, V>) -> Option<usize> {
@@ -141,7 +161,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         None
     }
 
-    pub fn split_index_node(inode: &mut BPIndexNode<FANOUT, K, V>) -> (K, BPNodePtr<FANOUT, K, V>) {
+    pub fn split_node(inode: &mut BPIndexNode<FANOUT, K, V>) -> (K, BPNodePtr<FANOUT, K, V>) {
         let split_key = *inode.get_key(FANOUT / 2).unwrap();
         let new_index = BPIndexNode::new_with(
             inode.keys.split_off(FANOUT / 2 + 1),
@@ -150,5 +170,56 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         );
         inode.keys.pop();
         (split_key, BPNode::new_index_ptr_from(new_index))
+    }
+
+    pub fn merge_children(&mut self, child_index: usize, merge_into_left: bool) {
+        // pop the key between the two children
+        let key_index = if merge_into_left {
+            child_index - 1
+        } else {
+            child_index
+        };
+        let key = self.keys.remove(key_index);
+
+        // pop the child
+        let child = self.children.remove(child_index);
+
+        let target_index = if merge_into_left {
+            child_index - 1
+        } else {
+            child_index
+        };
+        let target = self.get_child(target_index).unwrap();
+
+        match target.root.borrow_mut().deref_mut() {
+            BPNode::Leaf(leaf) => {
+                // strip the child node, and merge it into the target node
+                let mut child = child.root.borrow_mut();
+                leaf.merge(child.as_leaf_mut(), merge_into_left);
+            }
+            BPNode::Index(index) => {
+                assert!(index.keys.len() == 0);
+                assert!(index.children.len() == 1);
+
+                if merge_into_left {
+                    index.keys.insert(0, key);
+                    index.children.insert(0, child);
+                } else {
+                    index.keys.push(key);
+                    index.children.push(child);
+                }
+            }
+        }
+    }
+
+    pub fn rebalance_child(&mut self, left: usize) {}
+
+    pub fn get_sibiling_index(&self, index: usize) -> usize {
+        let sibiling_is_left = index > 0;
+        if sibiling_is_left {
+            index - 1
+        } else {
+            index + 1
+        }
     }
 }

@@ -130,19 +130,11 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         }
     }
 
-    pub fn get_self_index(&self) -> Option<usize> {
-        let parent = match self {
-            BPNode::Leaf(leaf) => leaf.get_parent(),
-            BPNode::Index(index) => index.get_parent(),
-        }?
-        .upgrade()
-        .unwrap();
-        for (i, child) in parent.borrow().as_index().get_children().iter().enumerate() {
-            if Rc::ptr_eq(&child.root, &parent) {
-                return Some(i);
-            }
+    pub fn get_index_of(&self, key: &K) -> usize {
+        match self {
+            BPNode::Leaf(leaf) => panic!("not an index node"),
+            BPNode::Index(index) => index.get_index_of(key),
         }
-        unreachable!();
     }
 
     pub fn is_root(&self) -> bool {
@@ -173,6 +165,13 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         }
     }
 
+    pub fn size(&self) -> usize {
+        match self {
+            BPNode::Leaf(lnode) => lnode.size(),
+            BPNode::Index(inode) => inode.size(),
+        }
+    }
+
     pub fn remove_child(&mut self, index: usize) -> BPTree<FANOUT, K, V> {
         match self {
             BPNode::Leaf(_) => panic!("not an index node"),
@@ -198,6 +197,20 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         match self {
             BPNode::Leaf(_) => panic!("not an index node"),
             BPNode::Index(inode) => inode.push_key_child(key, child),
+        }
+    }
+
+    pub fn remove_key_lchild(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
+        match self {
+            BPNode::Leaf(_) => panic!("not an index node"),
+            BPNode::Index(inode) => inode.remove_key_lchild(index),
+        }
+    }
+
+    pub fn remove_key_rchild(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
+        match self {
+            BPNode::Leaf(_) => panic!("not an index node"),
+            BPNode::Index(inode) => inode.remove_key_rchild(index),
         }
     }
 

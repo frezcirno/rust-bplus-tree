@@ -55,11 +55,11 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
     }
 
     pub fn is_minimum(&self) -> bool {
-        self.keys.len() == FANOUT / 2
+        self.keys.len() == (FANOUT + 1) / 2
     }
 
     pub fn is_underflow(&self) -> bool {
-        self.keys.len() < FANOUT / 2
+        self.keys.len() < (FANOUT + 1) / 2
     }
 
     pub fn is_empty(&self) -> bool {
@@ -68,6 +68,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
 
     pub fn is_root(&self) -> bool {
         self.parent.is_none()
+    }
+
+    pub fn size(&self) -> usize {
+        self.keys.len()
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
@@ -122,7 +126,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
         }
     }
 
-    pub fn delete_at(&mut self, index: usize) -> Option<(K, V)> {
+    pub fn remove(&mut self, index: usize) -> Option<(K, V)> {
         if index < self.keys.len() {
             let key = self.keys.remove(index);
             let value = self.values.remove(index);
@@ -181,5 +185,25 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
     pub fn insert_key_value(&mut self, index: usize, key: K, value: V) {
         self.keys.insert(index, key);
         self.values.insert(index, value);
+    }
+
+    pub fn merge(&mut self, other: &mut BPLeafNode<FANOUT, K, V>, other_is_next: bool) {
+        if other_is_next {
+            self.keys.append(&mut other.keys);
+            self.values.append(&mut other.values);
+            self.next = other.next.take();
+            if let Some(next) = self.next.as_ref() {
+                next.borrow_mut().as_leaf_mut().prev = other.prev.take();
+            }
+        } else {
+            // merge to front
+            self.keys.insert(0, other.keys.pop().unwrap());
+            self.values.insert(0, other.values.pop().unwrap());
+            self.prev = other.prev.take();
+            if let Some(prev) = self.prev.as_ref() {
+                prev.upgrade().unwrap().borrow_mut().as_leaf_mut().next = other.next.take();
+            }
+        }
+        other.parent.take();
     }
 }
