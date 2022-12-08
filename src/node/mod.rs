@@ -1,6 +1,9 @@
 mod bp_index_node;
 mod bp_leaf_node;
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
 
 pub use bp_index_node::BPIndexNode;
 pub use bp_leaf_node::BPLeafNode;
@@ -118,6 +121,117 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         match self {
             BPNode::Leaf(leaf) => leaf.search_key(key),
             BPNode::Index(index) => index.search_key(key),
+        }
+    }
+
+    pub(crate) fn insert_recur(root: &BPNodePtr<FANOUT, K, V>, key: K, value: V) {
+        let mut root = root.borrow_mut();
+
+        if root.is_empty() {
+            root.as_leaf_mut().push_key_value(key, value);
+            return;
+        }
+
+        let index = root.search_key(&key);
+        if let Ok(_) = index {
+            // If the key is already in the tree, do nothing.
+            return;
+        } else if let Err(index) = index {
+            // If the key is not in the tree
+            match root.deref_mut() {
+                BPNode::Leaf(lroot) => {
+                    lroot.insert_key_value(index, key, value);
+                }
+                BPNode::Index(iroot) => {
+                    let child = iroot.get_child_mut(index).unwrap();
+                    Self::insert_recur(child, key, value);
+                    if child.borrow().is_full() {
+                        let (split_key, right) = Self::split_node(&child);
+                        iroot.insert_key_at(index, split_key);
+                        iroot.insert_child_at(index + 1, right);
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn remove_recur(root: &BPNodePtr<FANOUT, K, V>, key: &K) {
+        let mut root = root.borrow_mut();
+
+        if root.is_empty() {
+            return;
+        }
+
+        // If the root is a leaf node, just remove the key if exists and return
+        if let BPNode::Leaf(leaf) = root.deref_mut() {
+            if let Ok(index) = leaf.search_key(&key) {
+                leaf.remove(index).unwrap();
+            }
+            return;
+        }
+
+        // The root is an index node
+        let root = root.as_index_mut();
+
+        // check if the key is in the tree root
+        let (exist, child_index) = root.get_index_of(key);
+
+        let underflow = {
+            // recursively remove the subtree root
+            let child = root.get_child_mut(child_index).unwrap();
+            Self::remove_recur(child, &key);
+            child.borrow().is_underflow()
+        };
+
+        if underflow {
+            // If the child node is underflow, merge or rebalance it with its sibling node
+            // It is guaranteed that the sibling node is not empty
+            let sibling_index = root.get_sibiling_index(child_index);
+            let sibiling_is_left = sibling_index < child_index;
+            let sibling = root.get_child(sibling_index).unwrap();
+            if sibling.borrow().is_minimum() {
+                // if the sibling node is minimum, merge it with the child node
+                root.merge_children(child_index, sibiling_is_left);
+            } else {
+                // if the sibling node is not minimum, rebalance it with the child node
+                root.rebalance_children(child_index, sibiling_is_left);
+            }
+        } else if exist {
+            // Find the successor and replace the key
+            let child = root.get_child(child_index).unwrap();
+            let successor = BPNode::minimum(&child);
+            root.set_key(child_index - 1, successor);
+        }
+    }
+
+    pub(crate) fn split_node(node: &BPNodePtr<FANOUT, K, V>) -> (K, BPNodePtr<FANOUT, K, V>) {
+        match node.borrow_mut().deref_mut() {
+            BPNode::Leaf(leaf) => BPLeafNode::split_leaf_node(node, leaf),
+            BPNode::Index(index) => BPIndexNode::split_node(index),
+        }
+    }
+
+    pub fn minimum(node: &BPNodePtr<FANOUT, K, V>) -> K {
+        let node = node.borrow();
+        if let BPNode::Index(inode) = node.deref() {
+            return Self::minimum(&inode.get_child(0).unwrap());
+        }
+        *node.as_leaf().get_key(0).unwrap()
+    }
+
+    pub(crate) fn search_recur(root: &BPNodePtr<FANOUT, K, V>, key: &K) -> Option<V> {
+        let root = root.borrow();
+        match root.deref() {
+            BPNode::Leaf(leaf) => leaf
+                .search_key(&key)
+                .ok()
+                .map(|index| leaf.get_value(index).unwrap())
+                .cloned(),
+            BPNode::Index(index) => {
+                let (_, idx) = index.get_index_of(&key);
+                let child = index.get_child(idx).unwrap();
+                Self::search_recur(child, key)
+            }
         }
     }
 }

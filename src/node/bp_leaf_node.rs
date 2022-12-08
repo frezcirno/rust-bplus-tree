@@ -69,45 +69,12 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
         self.parent.is_none()
     }
 
-    pub fn get(&self, key: &K) -> Option<&V> {
-        let index = self.keys.binary_search(key).ok()?;
-        self.values.get(index)
-    }
-
     pub fn get_key(&self, index: usize) -> Option<&K> {
         self.keys.get(index)
     }
 
-    pub fn set_key(&mut self, index: usize, key: K) {
-        self.keys[index] = key;
-    }
-
-    pub fn get_parent(&self) -> Option<&BPNodeWeak<FANOUT, K, V>> {
-        self.parent.as_ref()
-    }
-
-    pub fn set_parent(&mut self, parent: Option<BPNodeWeak<FANOUT, K, V>>) {
-        self.parent = parent;
-    }
-
-    pub fn get_next(&self) -> Option<&BPNodePtr<FANOUT, K, V>> {
-        self.next.as_ref()
-    }
-
-    pub fn get_next_mut(&mut self) -> Option<&mut BPNodePtr<FANOUT, K, V>> {
-        self.next.as_mut()
-    }
-
-    pub fn set_next(&mut self, next: BPNodePtr<FANOUT, K, V>) {
-        self.next = Some(next);
-    }
-
-    pub fn get_prev(&self) -> Option<BPNodeWeak<FANOUT, K, V>> {
-        self.prev.clone()
-    }
-
-    pub fn set_prev(&mut self, prev: BPNodeWeak<FANOUT, K, V>) {
-        self.prev = Some(prev);
+    pub fn get_value(&self, index: usize) -> Option<&V> {
+        self.values.get(index)
     }
 
     pub fn delete(&mut self, key: &K) -> bool {

@@ -1,12 +1,10 @@
-use crate::bp_tree::BPTree;
-
 use super::{BPNode, BPNodePtr, BPNodeWeak};
 use std::fmt::Debug;
 use std::ops::DerefMut;
 
 pub struct BPIndexNode<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> {
     keys: Vec<K>,
-    children: Vec<BPTree<FANOUT, K, V>>,
+    children: Vec<BPNodePtr<FANOUT, K, V>>,
     parent: Option<BPNodeWeak<FANOUT, K, V>>,
 }
 
@@ -34,7 +32,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
 
     pub fn new_with(
         keys: Vec<K>,
-        children: Vec<BPTree<FANOUT, K, V>>,
+        children: Vec<BPNodePtr<FANOUT, K, V>>,
         parent: Option<BPNodeWeak<FANOUT, K, V>>,
     ) -> Self {
         BPIndexNode {
@@ -64,20 +62,20 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.get(index)
     }
 
-    pub fn get_child(&self, index: usize) -> Option<&BPTree<FANOUT, K, V>> {
+    pub fn get_child(&self, index: usize) -> Option<&BPNodePtr<FANOUT, K, V>> {
         self.children.get(index)
     }
 
     pub fn get_child_clone(&self, index: usize) -> Option<BPNodePtr<FANOUT, K, V>> {
         let child = self.children.get(index)?;
-        Some(child.root.clone())
+        Some(child.clone())
     }
 
-    pub fn get_child_mut(&mut self, index: usize) -> Option<&mut BPTree<FANOUT, K, V>> {
+    pub fn get_child_mut(&mut self, index: usize) -> Option<&mut BPNodePtr<FANOUT, K, V>> {
         self.children.get_mut(index)
     }
 
-    pub fn get_children(&self) -> &Vec<BPTree<FANOUT, K, V>> {
+    pub fn get_children(&self) -> &Vec<BPNodePtr<FANOUT, K, V>> {
         &self.children
     }
 
@@ -89,7 +87,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.push(key);
     }
 
-    pub fn push_child(&mut self, child: BPTree<FANOUT, K, V>) {
+    pub fn push_child(&mut self, child: BPNodePtr<FANOUT, K, V>) {
         self.children.push(child);
     }
 
@@ -105,11 +103,11 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys[index] = key;
     }
 
-    pub(crate) fn insert_child_at(&mut self, index: usize, child: BPTree<FANOUT, K, V>) {
+    pub(crate) fn insert_child_at(&mut self, index: usize, child: BPNodePtr<FANOUT, K, V>) {
         self.children.insert(index, child);
     }
 
-    pub fn remove_child(&mut self, index: usize) -> BPTree<FANOUT, K, V> {
+    pub fn remove_child(&mut self, index: usize) -> BPNodePtr<FANOUT, K, V> {
         self.children.remove(index)
     }
 
@@ -154,14 +152,14 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         };
         let target = self.get_child(target_index).unwrap();
 
-        match target.root.borrow_mut().deref_mut() {
+        match target.borrow_mut().deref_mut() {
             BPNode::Leaf(leaf) => {
                 // strip the child node, and merge it into the target node
-                let mut child = child.root.borrow_mut();
+                let mut child = child.borrow_mut();
                 leaf.merge(child.as_leaf_mut(), merge_into_left);
             }
             BPNode::Index(index) => {
-                let mut child = child.root.borrow_mut();
+                let mut child = child.borrow_mut();
                 let child = child.as_index_mut().remove_child(0);
                 if merge_into_left {
                     index.keys.push(key);
