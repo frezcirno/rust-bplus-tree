@@ -55,11 +55,11 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
     }
 
     pub fn is_minimum(&self) -> bool {
-        self.keys.len() == (FANOUT + 1) / 2
+        self.keys.len() == FANOUT / 2
     }
 
     pub fn is_underflow(&self) -> bool {
-        self.keys.len() < (FANOUT + 1) / 2
+        self.keys.len() < FANOUT / 2
     }
 
     pub fn is_empty(&self) -> bool {
@@ -136,16 +136,6 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
         }
     }
 
-    // pub fn split(&mut self) -> (K, BPNodePtr<FANOUT, K, V>) {
-    //     let mid = self.keys.len() / 2;
-    //     let mut new_node = BPLeafNode::new();
-    //     new_node.keys = self.keys.split_off(mid);
-    //     new_node.values = self.values.split_off(mid);
-    //     new_node.parent = self.get_parent();
-    //     new_node.next = std::mem::replace(&mut self.next, None);
-    //     (new_node.keys[0], new_node)
-    // }
-
     pub fn insert(&mut self, key: K, value: V) -> bool {
         let index = match self.keys.binary_search(&key) {
             Ok(_) => return false,
@@ -205,5 +195,16 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
             }
         }
         other.parent.take();
+    }
+
+    pub fn steal(&mut self, other: &mut BPLeafNode<FANOUT, K, V>, other_is_next: bool) {
+        if other_is_next {
+            self.keys.push(other.keys.remove(0));
+            self.values.push(other.values.remove(0));
+        } else {
+            // steal from front
+            self.keys.insert(0, other.keys.pop().unwrap());
+            self.values.insert(0, other.values.pop().unwrap());
+        }
     }
 }

@@ -40,6 +40,23 @@ fn remove_naive_test() {
 }
 
 #[test]
+fn remove_naive_test1() {
+    let mut bptree = BPTree::<3, u32, u32>::new();
+
+    println!("insert [4, 3, 2, 1, 0]");
+    bptree.insert(4, 4);
+    bptree.insert(3, 3);
+    bptree.insert(2, 2);
+    bptree.insert(1, 1);
+    bptree.insert(0, 0);
+    println!("{:?}", bptree);
+
+    println!("remove 3");
+    bptree.remove(&3);
+    println!("{:?}", bptree);
+}
+
+#[test]
 fn remove_test1() {
     let mut bptree = BPTree::<3, u32, u32>::new();
 

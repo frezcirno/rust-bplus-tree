@@ -130,13 +130,6 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         }
     }
 
-    pub fn get_index_of(&self, key: &K) -> usize {
-        match self {
-            BPNode::Leaf(leaf) => panic!("not an index node"),
-            BPNode::Index(index) => index.get_index_of(key),
-        }
-    }
-
     pub fn is_root(&self) -> bool {
         match self {
             BPNode::Leaf(leaf) => leaf.is_root(),

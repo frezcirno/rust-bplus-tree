@@ -15,7 +15,12 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> Debug
     for BPIndexNode<FANOUT, K, V>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BPIndexNode {{ keys: {:?} }}", self.keys)
+        write!(
+            f,
+            "BPIndexNode {{ keys: {:?}, {:?} children }}",
+            self.keys,
+            self.children.len()
+        )
     }
 }
 
@@ -45,11 +50,11 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
     }
 
     pub fn is_minimum(&self) -> bool {
-        self.children.len() == FANOUT / 2
+        self.children.len() == (FANOUT + 1) / 2
     }
 
     pub fn is_underflow(&self) -> bool {
-        self.children.len() < FANOUT / 2
+        self.children.len() < (FANOUT + 1) / 2
     }
 
     pub fn is_empty(&self) -> bool {
@@ -70,6 +75,11 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
 
     pub fn get_child(&self, index: usize) -> Option<&BPTree<FANOUT, K, V>> {
         self.children.get(index)
+    }
+
+    pub fn get_child_clone(&self, index: usize) -> Option<BPNodePtr<FANOUT, K, V>> {
+        let child = self.children.get(index)?;
+        Some(child.root.clone())
     }
 
     pub fn get_child_mut(&mut self, index: usize) -> Option<&mut BPTree<FANOUT, K, V>> {
@@ -145,10 +155,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.binary_search(key)
     }
 
-    pub fn get_index_of(&self, key: &K) -> usize {
+    pub fn get_index_of(&self, key: &K) -> (bool, usize) {
         match self.keys.binary_search(key) {
-            Ok(index) => index + 1,
-            Err(index) => index,
+            Ok(index) => (true, index + 1),
+            Err(index) => (false, index),
         }
     }
 
@@ -172,22 +182,22 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         (split_key, BPNode::new_index_ptr_from(new_index))
     }
 
-    pub fn merge_children(&mut self, child_index: usize, merge_into_left: bool) {
+    pub fn merge_children(&mut self, to_remove: usize, merge_into_left: bool) {
         // pop the key between the two children
         let key_index = if merge_into_left {
-            child_index - 1
+            to_remove - 1
         } else {
-            child_index
+            to_remove
         };
         let key = self.keys.remove(key_index);
 
         // pop the child
-        let child = self.children.remove(child_index);
+        let child = self.children.remove(to_remove);
 
         let target_index = if merge_into_left {
-            child_index - 1
+            to_remove - 1
         } else {
-            child_index
+            to_remove
         };
         let target = self.get_child(target_index).unwrap();
 
@@ -198,21 +208,61 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
                 leaf.merge(child.as_leaf_mut(), merge_into_left);
             }
             BPNode::Index(index) => {
-                assert!(index.keys.len() == 0);
-                assert!(index.children.len() == 1);
-
+                let mut child = child.root.borrow_mut();
+                let child = child.remove_child(0);
                 if merge_into_left {
-                    index.keys.insert(0, key);
-                    index.children.insert(0, child);
-                } else {
                     index.keys.push(key);
                     index.children.push(child);
+                } else {
+                    index.keys.insert(0, key);
+                    index.children.insert(0, child);
                 }
             }
         }
     }
 
-    pub fn rebalance_child(&mut self, left: usize) {}
+    pub fn rebalance_children(&mut self, target_index: usize, rebalance_from_left: bool) {
+        // pop the key between the two children
+        let key_index = if rebalance_from_left {
+            target_index - 1
+        } else {
+            target_index
+        };
+        let key = self.keys.remove(key_index);
+
+        //
+        let from_index = if rebalance_from_left {
+            target_index - 1
+        } else {
+            target_index + 1
+        };
+        let from = self.get_child_clone(from_index).unwrap();
+        let mut from = from.borrow_mut();
+
+        let target = self.get_child_clone(target_index).unwrap();
+
+        match target.borrow_mut().deref_mut() {
+            BPNode::Leaf(leaf) => {
+                leaf.steal(from.as_leaf_mut(), rebalance_from_left);
+            }
+            BPNode::Index(index) => {
+                assert!(index.keys.len() == 0);
+                assert!(index.children.len() == 1);
+                let from = from.as_index_mut();
+
+                if rebalance_from_left {
+                    index.keys.insert(0, key);
+                    index.children.insert(0, from.remove_child(0));
+                    let from_key = from.remove_key(0);
+                    self.insert_key_at(key_index, from_key);
+                } else {
+                    index.keys.push(key);
+                    index.children.push(from.remove_child(0));
+                    self.insert_key_at(key_index, from.remove_key(0));
+                }
+            }
+        };
+    }
 
     pub fn get_sibiling_index(&self, index: usize) -> usize {
         let sibiling_is_left = index > 0;
