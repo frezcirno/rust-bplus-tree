@@ -3,7 +3,6 @@ use crate::bp_tree::BPTree;
 use super::{BPNode, BPNodePtr, BPNodeWeak};
 use std::fmt::Debug;
 use std::ops::DerefMut;
-use std::rc::Rc;
 
 pub struct BPIndexNode<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> {
     keys: Vec<K>,
@@ -61,14 +60,6 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys.is_empty()
     }
 
-    pub fn is_root(&self) -> bool {
-        self.parent.is_none()
-    }
-
-    pub fn size(&self) -> usize {
-        self.keys.len()
-    }
-
     pub fn get_key(&self, index: usize) -> Option<&K> {
         self.keys.get(index)
     }
@@ -94,10 +85,6 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.parent.as_ref()
     }
 
-    pub fn set_parent(&mut self, parent: Option<BPNodeWeak<FANOUT, K, V>>) {
-        self.parent = parent;
-    }
-
     pub fn push_key(&mut self, key: K) {
         self.keys.push(key);
     }
@@ -106,15 +93,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.children.push(child);
     }
 
-    pub fn insert_key_at(&mut self, index: usize, key: K) {
-        self.keys.insert(index, key);
-    }
-
-    pub fn insert_key(&mut self, key: K) {
-        let index = match self.keys.binary_search(&key) {
-            Ok(index) => index,
-            Err(index) => index,
-        };
+    pub(crate) fn insert_key_at(&mut self, index: usize, key: K) {
         self.keys.insert(index, key);
     }
 
@@ -126,29 +105,12 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         self.keys[index] = key;
     }
 
-    pub fn insert_child_at(&mut self, index: usize, child: BPTree<FANOUT, K, V>) {
+    pub(crate) fn insert_child_at(&mut self, index: usize, child: BPTree<FANOUT, K, V>) {
         self.children.insert(index, child);
-    }
-
-    pub fn insert_child(&mut self, index: usize, child: BPTree<FANOUT, K, V>) {
-        self.children.insert(index, child);
-    }
-
-    pub fn push_key_child(&mut self, key: K, child: BPTree<FANOUT, K, V>) {
-        self.keys.push(key);
-        self.children.push(child);
     }
 
     pub fn remove_child(&mut self, index: usize) -> BPTree<FANOUT, K, V> {
         self.children.remove(index)
-    }
-
-    pub fn remove_key_lchild(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
-        Some((self.keys.remove(index), self.children.remove(index)))
-    }
-
-    pub fn remove_key_rchild(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
-        Some((self.keys.remove(index), self.children.remove(index + 1)))
     }
 
     pub fn search_key(&self, key: &K) -> Result<usize, usize> {
@@ -160,15 +122,6 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
             Ok(index) => (true, index + 1),
             Err(index) => (false, index),
         }
-    }
-
-    pub fn search_child(&self, node: &BPTree<FANOUT, K, V>) -> Option<usize> {
-        for (i, child) in self.children.iter().enumerate() {
-            if Rc::ptr_eq(&child.root, &node.root) {
-                return Some(i);
-            }
-        }
-        None
     }
 
     pub fn split_node(inode: &mut BPIndexNode<FANOUT, K, V>) -> (K, BPNodePtr<FANOUT, K, V>) {
@@ -209,7 +162,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
             }
             BPNode::Index(index) => {
                 let mut child = child.root.borrow_mut();
-                let child = child.remove_child(0);
+                let child = child.as_index_mut().remove_child(0);
                 if merge_into_left {
                     index.keys.push(key);
                     index.children.push(child);

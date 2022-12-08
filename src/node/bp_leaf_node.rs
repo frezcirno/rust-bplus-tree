@@ -3,7 +3,6 @@ use std::{cell::RefCell, rc::Rc};
 
 use super::{BPNode, BPNodePtr, BPNodeWeak};
 
-/// B-plus tree node
 pub struct BPLeafNode<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> {
     keys: Vec<K>,
     values: Vec<V>,
@@ -68,10 +67,6 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
 
     pub fn is_root(&self) -> bool {
         self.parent.is_none()
-    }
-
-    pub fn size(&self) -> usize {
-        self.keys.len()
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {

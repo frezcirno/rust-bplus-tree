@@ -10,8 +10,6 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::bp_tree::BPTree;
-
 pub type BPNodePtr<const FANOUT: usize, K, V> = Rc<RefCell<BPNode<FANOUT, K, V>>>;
 pub type BPNodeWeak<const FANOUT: usize, K, V> = Weak<RefCell<BPNode<FANOUT, K, V>>>;
 
@@ -116,108 +114,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         }
     }
 
-    pub fn get_parent(&self) -> Option<&BPNodeWeak<FANOUT, K, V>> {
-        match self {
-            BPNode::Leaf(leaf) => leaf.get_parent(),
-            BPNode::Index(index) => index.get_parent(),
-        }
-    }
-
-    pub fn set_parent(&mut self, parent: Option<BPNodeWeak<FANOUT, K, V>>) {
-        match self {
-            BPNode::Leaf(leaf) => leaf.set_parent(parent),
-            BPNode::Index(index) => index.set_parent(parent),
-        }
-    }
-
-    pub fn is_root(&self) -> bool {
-        match self {
-            BPNode::Leaf(leaf) => leaf.is_root(),
-            BPNode::Index(index) => index.is_root(),
-        }
-    }
-
     pub fn search_key(&self, key: &K) -> Result<usize, usize> {
         match self {
             BPNode::Leaf(leaf) => leaf.search_key(key),
             BPNode::Index(index) => index.search_key(key),
-        }
-    }
-
-    pub fn get_child(&self, index: usize) -> Option<&BPTree<FANOUT, K, V>> {
-        match self {
-            BPNode::Leaf(_) => panic!("not an index node"),
-            BPNode::Index(inode) => inode.get_child(index),
-        }
-    }
-
-    pub fn get_child_mut(&mut self, index: usize) -> Option<&mut BPTree<FANOUT, K, V>> {
-        match self {
-            BPNode::Leaf(_) => panic!("not an index node"),
-            BPNode::Index(inode) => inode.get_child_mut(index),
-        }
-    }
-
-    pub fn size(&self) -> usize {
-        match self {
-            BPNode::Leaf(lnode) => lnode.size(),
-            BPNode::Index(inode) => inode.size(),
-        }
-    }
-
-    pub fn remove_child(&mut self, index: usize) -> BPTree<FANOUT, K, V> {
-        match self {
-            BPNode::Leaf(_) => panic!("not an index node"),
-            BPNode::Index(inode) => inode.remove_child(index),
-        }
-    }
-
-    pub fn get_key(&self, index: usize) -> Option<&K> {
-        match self {
-            BPNode::Leaf(lnode) => lnode.get_key(index),
-            BPNode::Index(inode) => inode.get_key(index),
-        }
-    }
-
-    pub fn set_key(&mut self, index: usize, key: K) {
-        match self {
-            BPNode::Leaf(lnode) => lnode.set_key(index, key),
-            BPNode::Index(inode) => inode.set_key(index, key),
-        }
-    }
-
-    pub fn push_key_child(&mut self, key: K, child: BPTree<FANOUT, K, V>) {
-        match self {
-            BPNode::Leaf(_) => panic!("not an index node"),
-            BPNode::Index(inode) => inode.push_key_child(key, child),
-        }
-    }
-
-    pub fn remove_key_lchild(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
-        match self {
-            BPNode::Leaf(_) => panic!("not an index node"),
-            BPNode::Index(inode) => inode.remove_key_lchild(index),
-        }
-    }
-
-    pub fn remove_key_rchild(&mut self, index: usize) -> Option<(K, BPTree<FANOUT, K, V>)> {
-        match self {
-            BPNode::Leaf(_) => panic!("not an index node"),
-            BPNode::Index(inode) => inode.remove_key_rchild(index),
-        }
-    }
-
-    pub fn push_key_value(&mut self, key: K, value: V) {
-        match self {
-            BPNode::Leaf(leaf) => leaf.push_key_value(key, value),
-            BPNode::Index(_) => panic!("not a leaf node"),
-        }
-    }
-
-    pub fn insert_key_value(&mut self, index: usize, key: K, value: V) {
-        match self {
-            BPNode::Leaf(leaf) => leaf.insert_key_value(index, key, value),
-            BPNode::Index(_) => panic!("not a leaf node"),
         }
     }
 }

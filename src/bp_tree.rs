@@ -66,7 +66,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
         let mut root = self.root.borrow_mut();
 
         if root.is_empty() {
-            root.push_key_value(key, value);
+            root.as_leaf_mut().push_key_value(key, value);
             return;
         }
 
@@ -103,7 +103,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
     pub fn remove(&mut self, key: &K) {
         self.remove_recur(key);
         if self.root.borrow().is_empty() {
-            let child = self.root.borrow_mut().remove_child(0);
+            let child = self.root.borrow_mut().as_index_mut().remove_child(0);
             self.root_replace(child.root);
         }
     }
@@ -162,6 +162,6 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPTree<FANOUT
         if let BPNode::Index(inode) = node.deref() {
             return BPTree::minimum(&inode.get_child(0).unwrap().root);
         }
-        *node.get_key(0).unwrap()
+        *node.as_leaf().get_key(0).unwrap()
     }
 }
