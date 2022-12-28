@@ -7,8 +7,8 @@ pub struct BPLeafNode<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Deb
     keys: Vec<K>,
     values: Vec<V>,
     parent: Option<BPNodeWeak<FANOUT, K, V>>,
-    prev: Option<BPNodeWeak<FANOUT, K, V>>,
-    next: Option<BPNodePtr<FANOUT, K, V>>,
+    pub prev: Option<BPNodeWeak<FANOUT, K, V>>,
+    pub next: Option<BPNodePtr<FANOUT, K, V>>,
 }
 
 impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> Debug
@@ -51,6 +51,10 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPLeafNode<FA
 
     pub fn is_full(&self) -> bool {
         self.keys.len() == FANOUT
+    }
+
+    pub fn is_maxinum(&self) -> bool {
+        self.keys.len() == FANOUT - 1
     }
 
     pub fn is_minimum(&self) -> bool {

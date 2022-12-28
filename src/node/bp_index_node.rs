@@ -1,11 +1,15 @@
 use super::{BPNode, BPNodePtr, BPNodeWeak};
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::ops::DerefMut;
+use std::rc::Rc;
 
 pub struct BPIndexNode<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> {
     keys: Vec<K>,
     children: Vec<BPNodePtr<FANOUT, K, V>>,
     parent: Option<BPNodeWeak<FANOUT, K, V>>,
+    pub prev: Option<BPNodeWeak<FANOUT, K, V>>,
+    pub next: Option<BPNodePtr<FANOUT, K, V>>,
 }
 
 impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> Debug
@@ -14,9 +18,9 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> Debug
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "BPIndexNode {{ keys: {:?}, {:?} children }}",
+            "BPIndexNode {{ keys: {:?}, {:?} children}}",
             self.keys,
-            self.children.len()
+            self.children.len(),
         )
     }
 }
@@ -27,6 +31,8 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
             keys: Vec::new(),
             children: Vec::new(),
             parent: None,
+            prev: None,
+            next: None,
         }
     }
 
@@ -34,16 +40,24 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         keys: Vec<K>,
         children: Vec<BPNodePtr<FANOUT, K, V>>,
         parent: Option<BPNodeWeak<FANOUT, K, V>>,
+        prev: Option<BPNodeWeak<FANOUT, K, V>>,
+        next: Option<BPNodePtr<FANOUT, K, V>>,
     ) -> Self {
         BPIndexNode {
             keys,
             children,
             parent,
+            prev,
+            next,
         }
     }
 
     pub fn is_full(&self) -> bool {
         self.keys.len() == FANOUT
+    }
+
+    pub fn is_maxinum(&self) -> bool {
+        self.children.len() == FANOUT - 1
     }
 
     pub fn is_minimum(&self) -> bool {
@@ -122,15 +136,19 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
         }
     }
 
-    pub fn split_node(inode: &mut BPIndexNode<FANOUT, K, V>) -> (K, BPNodePtr<FANOUT, K, V>) {
+    pub fn split_node(node: &BPNodePtr<FANOUT, K, V>,inode: &mut BPIndexNode<FANOUT, K, V>) -> (K, BPNodePtr<FANOUT, K, V>) {
         let split_key = *inode.get_key(FANOUT / 2).unwrap();
         let new_index = BPIndexNode::new_with(
             inode.keys.split_off(FANOUT / 2 + 1),
             inode.children.split_off(FANOUT / 2 + 1),
             inode.parent.clone(),
+            Some(Rc::<RefCell<BPNode<FANOUT, K, V>>>::downgrade(node)),
+            inode.next.clone()
         );
         inode.keys.pop();
-        (split_key, BPNode::new_index_ptr_from(new_index))
+        let new_index_ptr = BPNode::new_index_ptr_from(new_index);
+        inode.next = Some(new_index_ptr.clone());
+        (split_key, new_index_ptr)
     }
 
     pub fn merge_children(&mut self, to_remove: usize, merge_into_left: bool) {
@@ -160,13 +178,15 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPIndexNode<F
             }
             BPNode::Index(index) => {
                 let mut child = child.borrow_mut();
-                let child = child.as_index_mut().remove_child(0);
+                let child0 = child.as_index_mut().remove_child(0);
                 if merge_into_left {
                     index.keys.push(key);
-                    index.children.push(child);
+                    index.children.push(child0);
+                    index.next = child.as_index_mut().next.take();
                 } else {
                     index.keys.insert(0, key);
-                    index.children.insert(0, child);
+                    index.children.insert(0, child0);
+                    index.prev = child.as_index_mut().prev.take();
                 }
             }
         }

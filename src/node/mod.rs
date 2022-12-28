@@ -103,6 +103,13 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
         }
     }
 
+    pub fn is_maxinum(&self) -> bool {
+        match self {
+            BPNode::Leaf(leaf) => leaf.is_maxinum(),
+            BPNode::Index(index) => index.is_maxinum(),
+        }
+    }
+
     pub fn is_minimum(&self) -> bool {
         match self {
             BPNode::Leaf(leaf) => leaf.is_minimum(),
@@ -143,12 +150,55 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
                     lroot.insert_key_value(index, key, value);
                 }
                 BPNode::Index(iroot) => {
+                    let child_num = iroot.get_children().len();
+                    let mut change_key=iroot.get_key(0).unwrap().clone();
+                    let mut old_key = iroot.get_key(0).unwrap().clone();
                     let child = iroot.get_child_mut(index).unwrap();
                     Self::insert_recur(child, key, value);
-                    if child.borrow().is_full() {
-                        let (split_key, right) = Self::split_node(&child);
-                        iroot.insert_key_at(index, split_key);
-                        iroot.insert_child_at(index + 1, right);
+                    if child.borrow_mut().is_full() {
+                        let mut is_changed = false;
+                        if index < child_num-1 {
+                            {
+                                let mut cb = child.borrow_mut();
+                                match cb.deref(){
+                                    BPNode::Leaf(lroot) => {
+                                        if let Some(nextnode) = lroot.next.clone() {
+                                            if ! nextnode.borrow_mut().is_maxinum(){
+                                                let removal = cb.as_leaf_mut().remove(FANOUT-1);
+                                                is_changed = true;
+                                                if let Some(tmp_removel) = removal{
+                                                    change_key = tmp_removel.0;
+                                                    let val = tmp_removel.1;
+                                                    old_key = *nextnode.borrow_mut().as_leaf_mut().get_key(0).unwrap();
+                                                    nextnode.borrow_mut().as_leaf_mut().insert(change_key.clone(), val);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    BPNode::Index(iroot) => { 
+                                        if let Some(nextnode) = iroot.next.clone() {
+                                            if ! nextnode.borrow_mut().is_maxinum(){
+                                                is_changed = true;
+                                                change_key = child.borrow_mut().as_index_mut().remove_key(FANOUT-1);
+                                                old_key = *nextnode.borrow_mut().as_index_mut().get_key(0).unwrap();
+                                                nextnode.borrow_mut().as_index_mut().insert_key_at(0, change_key.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if is_changed{
+                            let (is_find, ind) = iroot.get_index_of(&old_key);
+                            if is_find{
+                                iroot.set_key(ind-1, change_key);
+                            }
+                        }
+                        else {
+                            let (split_key, right) = Self::split_node(&child);
+                            iroot.insert_key_at(index, split_key);
+                            iroot.insert_child_at(index + 1, right);
+                        }
                     }
                 }
             }
@@ -207,7 +257,7 @@ impl<const FANOUT: usize, K: Copy + Ord + Debug, V: Clone + Debug> BPNode<FANOUT
     pub(crate) fn split_node(node: &BPNodePtr<FANOUT, K, V>) -> (K, BPNodePtr<FANOUT, K, V>) {
         match node.borrow_mut().deref_mut() {
             BPNode::Leaf(leaf) => BPLeafNode::split_leaf_node(node, leaf),
-            BPNode::Index(index) => BPIndexNode::split_node(index),
+            BPNode::Index(index) => BPIndexNode::split_node(node, index),
         }
     }
 
